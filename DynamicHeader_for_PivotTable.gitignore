@@ -1,0 +1,124 @@
+-- *********************************************************************************************************
+-- File name:	DynamicHeader_for_PivotTable.sql
+-- Author:		MON
+-- Created:		30.05.2013
+-- Changes:		Date		Who		What
+--				----------------------------------------------------------------------------------------- 
+--				30.05.2013	MON 	Procedure created, AMLDEV-19
+--				28.03.2014	MON		Added total, AMLDEV-30
+-- *********************************************************************************************************
+-- Purpose/Function: Wiki page for current hits of kdprevent solution
+-- Dynamic Header for Pivot Table in SQL
+-- *********************************************************************************************************
+ALTER PROCEDURE wiki.P_WIK_KDPrevent_Current_Hits @AreaId int
+AS 
+
+DECLARE @PivotColumnHeaders VARCHAR(MAX)
+
+IF @AreaId = 0
+BEGIN
+
+SELECT @PivotColumnHeaders = 
+  COALESCE(
+    @PivotColumnHeaders + ',[' + cast(Score as varchar) + ']',
+    '[' + cast(Score as varchar)+ ']'
+	  )
+FROM OPENQUERY(KDPREV, 'SELECT distinct
+            Score
+      FROM 
+            T_NLM_WHITELIST ORDER BY Score ASC
+      ') AS x
+
+SELECT @PivotColumnHeaders = @PivotColumnHeaders+',[Total]'   
+
+DECLARE @PivotTableSQL NVARCHAR(MAX)
+SET @PivotTableSQL = N'
+SELECT 
+      *
+  FROM (
+                  SELECT  
+Whitelist_status
+, CASE WHEN Score=0 THEN ''Total'' ELSE Score END AS Score
+, SUM(Hits*1) AS Hits
+FROM OPENQUERY(KDPREV, 
+''SELECT 
+	CASE WHEN Whitelist_status = ''''FALSE''''
+			THEN ''''REAL CASE''''
+			WHEN Whitelist_status = ''''TRUE''''
+			THEN ''''WHITE LISTED''''
+			ELSE Whitelist_status
+	END AS Whitelist_status , 
+	Score,
+	Count (*) as Hits
+FROM 
+T_NLM_WHITELIST
+GROUP BY
+Whitelist_status, 
+Score
+UNION ALL
+SELECT 
+    CASE WHEN Whitelist_status = ''''FALSE''''
+            THEN ''''REAL CASE''''
+            WHEN Whitelist_status = ''''TRUE''''
+            THEN ''''WHITE LISTED''''
+            ELSE Whitelist_status
+    END AS Whitelist_status ,
+	0 AS Score,
+	Count(*) as Hits
+FROM 
+    T_NLM_WHITELIST
+GROUP BY
+Whitelist_status, 
+Score
+ORDER BY 
+Score desc'')
+GROUP BY Whitelist_status, Score
+) AS PivotData         
+  PIVOT (
+    max(Hits)
+    FOR Score IN ( ' + @PivotColumnHeaders + ' )
+  ) AS PivotTable
+'
+
+EXECUTE(@PivotTableSQL)
+
+
+END
+ELSE
+BEGIN
+
+	SELECT 
+		x.StatusOfAlert
+		,x.CountofStatusofAlert as [Counts]
+		,x.GroupName
+		,x.UserName
+	FROM 
+		OPENQUERY(KDPREV,'
+						select 
+							base.StatusofAlert 
+							,count(*) as CountofStatusofAlert
+							,base.UserName
+							,base.GroupName
+						from
+						(
+						SELECT 
+						   A.alert_id,
+						   CASE 
+							  WHEN (A.CLOSURE IS NOT NULL AND A.DUE_DATE IS NULL) THEN ''Archived''
+							  WHEN (A.CLOSURE IS NOT NULL AND A.DUE_DATE IS NOT NULL) THEN ''Triggered''
+							  WHEN (A.CURRENT_STATUS_CODE=0) THEN ''Open''
+							  WHEN (A.CURRENT_STATUS_CODE<>0) THEN ''Under Investigation'' 
+						   END AS StatusOfAlert,
+						   US.FULL_NAME AS UserName,
+						   GR.GROUP_NAME AS GroupName
+						FROM
+						   AL.AL_ALERT A
+						   LEFT OUTER JOIN AL.AL_USER US ON US.USER_ID = A.CURRENTLY_ASSIGNED_TO
+						   LEFT OUTER JOIN AL.AL_GROUP GR ON GR.GROUP_ID = A.CURRENT_RESPONSIBLE_GROUP
+						) BASE
+						GROUP BY 
+						  BASE.StatusofAlert, BASE.UserName, BASE.GroupName
+		') as x
+		ORDER BY 1
+			  
+END	
