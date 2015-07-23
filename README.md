@@ -1,11 +1,4 @@
--- ************************************************************************************
--- File name:   Filename.sql
--- Author:      Neil Monreal
--- Created:     10.28.1982
--- Change Log:  Date        Who     What
---              -----------------------------------------------------------------------
---              10.28.1982  MON     This is a Generic Description
---              
--- ************************************************************************************
--- Purpose/Function:    SQL Script for Procedure
--- ************************************************************************************
+#SQL Scripts
+Author: Neil Monreal Created: 10.28.1982 
+Purpose/Function: SQL Script for Procedure, Functions, Views, etc.
+Changes:
